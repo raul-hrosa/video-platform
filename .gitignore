@@ -1,0 +1,34 @@
+# env
+.env
+*.env
+!.env.example
+
+# node
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# java / maven
+backend/target/
+*.class
+
+# logs
+*.log
+npm-debug.log*
+
+# ide
+.idea/
+.vscode/
+*.iml
+
+# os
+.DS_Store
+Thumbs.db
+
+docs/

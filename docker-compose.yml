@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-video_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-video}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-video}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-video} -d ${POSTGRES_DB:-video_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-video_platform}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-video}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-video}
+      MEDIA_PROVIDER: ${MEDIA_PROVIDER:-livekit}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      PULSERTC_API_URL: ${PULSERTC_API_URL:-}
+      PULSERTC_API_KEY: ${PULSERTC_API_KEY:-}
+      PULSERTC_WS_URL: ${PULSERTC_WS_URL:-}
+      PULSERTC_WEBHOOK_SECRET: ${PULSERTC_WEBHOOK_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
+      ROOM_EXPIRATION_CHECK_INTERVAL: ${ROOM_EXPIRATION_CHECK_INTERVAL:-PT30S}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-*}
+    ports:
+      - "${BACKEND_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_MEDIA_PROVIDER: ${VITE_MEDIA_PROVIDER:-${MEDIA_PROVIDER:-livekit}}
+        VITE_LIVEKIT_URL: ${VITE_LIVEKIT_URL}
+        VITE_PULSERTC_URL: ${VITE_PULSERTC_URL:-}
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:

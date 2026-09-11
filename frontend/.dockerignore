@@ -1,0 +1,9 @@
+node_modules
+dist
+.vite
+.env
+.env.*
+!.env.example
+# a dependência local vendorizada precisa entrar no build
+!vendor
+!vendor/pulsertc-client/dist

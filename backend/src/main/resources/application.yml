@@ -1,0 +1,65 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: video-platform-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/video_platform}
+    username: ${SPRING_DATASOURCE_USERNAME:video}
+    password: ${SPRING_DATASOURCE_PASSWORD:video}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+media:
+  # Provider de midia ativo (Sprint 11 §17): livekit (padrao/fallback) ou pulsertc.
+  provider: ${MEDIA_PROVIDER:livekit}
+  pulsertc:
+    api-url: ${PULSERTC_API_URL:}
+    api-key: ${PULSERTC_API_KEY:}
+    # URL publica do signaling plane entregue ao browser; se vazia, derivada de api-url.
+    ws-url: ${PULSERTC_WS_URL:}
+    # Segredo HMAC-SHA256 dos webhooks; se vazio, usa a api-key.
+    webhook-secret: ${PULSERTC_WEBHOOK_SECRET:}
+    token-ttl: PT1H
+    webhook-tolerance: PT5M
+
+livekit:
+  url: ${LIVEKIT_URL:}
+  api-key: ${LIVEKIT_API_KEY:}
+  api-secret: ${LIVEKIT_API_SECRET:}
+  token-ttl: PT1H
+
+room:
+  # Intervalo da varredura que expira salas vencidas (ISO-8601 duration).
+  expiration:
+    check-interval: ${ROOM_EXPIRATION_CHECK_INTERVAL:PT30S}
+
+appointment:
+  # Janela de entrada antes do horario agendado, em minutos (Sprint 8 §11).
+  join-early-minutes: ${APPOINTMENT_JOIN_EARLY_MINUTES:15}
+  # Antecedencia com que o scheduler materializa a proxima ocorrencia (§20).
+  prepare-ahead: ${APPOINTMENT_PREPARE_AHEAD:PT20M}
+  occurrence:
+    check-interval: ${APPOINTMENT_OCCURRENCE_CHECK_INTERVAL:PT60S}
+
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+  issuer: video-platform
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+# O formato e os niveis de log ficam em logback-spring.xml (por profile).
