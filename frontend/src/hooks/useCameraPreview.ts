@@ -37,12 +37,12 @@ export function useCameraPreview(opts: PreviewOptions) {
       const constraints: MediaStreamConstraints = {
         video: cameraEnabled
           ? cameraId
-            ? { deviceId: { exact: cameraId } }
+            ? { deviceId: { ideal: cameraId } }
             : true
           : false,
         audio: microphoneEnabled
           ? microphoneId
-            ? { deviceId: { exact: microphoneId } }
+            ? { deviceId: { ideal: microphoneId } }
             : true
           : false,
       };

@@ -68,7 +68,7 @@ function VideoApp({ userName }: { userName: string }) {
     return (
       <div className="mx-auto flex min-h-full max-w-md flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-xl font-semibold text-slate-100">
-          {state === 'ERROR' ? 'A chamada foi encerrada' : 'Voce saiu da chamada'}
+          {state === 'ERROR' ? 'Problema de conexao' : 'Voce saiu da chamada'}
         </h1>
         {error && <ErrorNotice error={error} />}
         <button

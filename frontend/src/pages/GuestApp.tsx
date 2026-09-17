@@ -75,8 +75,12 @@ export function GuestApp({ roomId }: { roomId: string }) {
         joinConfig={session.joinConfig}
         resolveSession={false}
         onLeave={() => setState('LEFT')}
-        onError={() => {
-          setError({ code: 'CONNECTION_ERROR', message: 'Conexao com a sala foi perdida.' });
+        onError={(err: Error) => {
+          const isToken = err.name === 'TokenError';
+          const message = isToken
+            ? 'Sessao expirada. Volte e entre na sala novamente.'
+            : 'Nao foi possivel conectar a sala. Verifique sua conexao com a internet e tente de novo.';
+          setError({ code: 'CONNECTION_ERROR', message });
           setState('ERROR');
         }}
       />

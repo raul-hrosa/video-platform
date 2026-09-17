@@ -591,8 +591,16 @@ var PulseRTC = (() => {
       let stream;
       try {
         stream = await w.getUserMedia({ audio: true, video: true });
-      } catch (e) {
-        throw new PublishError("getUserMedia failed", e);
+      } catch {
+        try {
+          stream = await w.getUserMedia({ audio: true, video: false });
+        } catch {
+          try {
+            stream = await w.getUserMedia({ audio: false, video: true });
+          } catch (e) {
+            throw new PublishError("getUserMedia failed", e);
+          }
+        }
       }
       this.stream = stream;
       const audio = stream.getAudioTracks()[0];

@@ -6,7 +6,7 @@
  * - O analyser **não** é ligado ao `destination` — não afeta a reprodução, que
  *   continua saindo pelo `<video>`/`<audio>` do tile.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type AudioCtx = typeof AudioContext;
 
@@ -115,4 +115,51 @@ export function useAudioLevel(stream: MediaStream | null, active = true): number
   }, [stream, audioTrackId, active]);
 
   return level;
+}
+
+/**
+ * Roteia o áudio do `stream` por um `GainNode` (0..∞) ligado ao
+ * `AudioContext.destination`. O gain padrão 1 = volume original; 2 = dobro.
+ * Quem chama deve silenciar o elemento <video>/<audio> para evitar eco.
+ */
+export function useAudioGain(stream: MediaStream | null, gain: number, enabled = true): void {
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const audioTrackId = stream?.getAudioTracks()[0]?.id ?? null;
+
+  useEffect(() => {
+    if (!stream || !enabled || stream.getAudioTracks().length === 0) {
+      gainNodeRef.current = null;
+      return;
+    }
+    const c = getCtx();
+    if (!c) return;
+    let source: MediaStreamAudioSourceNode;
+    let gainNode: GainNode;
+    try {
+      source = c.createMediaStreamSource(stream);
+      gainNode = c.createGain();
+      gainNode.gain.value = Math.max(0, gain);
+      source.connect(gainNode);
+      gainNode.connect(c.destination);
+      gainNodeRef.current = gainNode;
+    } catch {
+      gainNodeRef.current = null;
+      return;
+    }
+    return () => {
+      try {
+        source.disconnect();
+        gainNode.disconnect();
+      } catch { /* ctx já fechado */ }
+      gainNodeRef.current = null;
+    };
+  // audioTrackId rastreia troca de track sem recriar desnecessariamente
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioTrackId, enabled]);
+
+  useEffect(() => {
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = Math.max(0, gain);
+    }
+  }, [gain]);
 }

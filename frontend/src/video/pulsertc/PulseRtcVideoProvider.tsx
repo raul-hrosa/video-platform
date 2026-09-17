@@ -18,7 +18,7 @@ import { LogEvent, logger } from '../../services/logger';
 import { friendlyReason, remoteQualityDescription } from '../../services/qualityText';
 import type { QualityLevel } from '../../types/connectionQuality';
 import type { VideoProviderProps } from '../VideoProvider';
-import { useAudioLevel } from './audioLevel';
+import { useAudioGain, useAudioLevel } from './audioLevel';
 import { labelForIdentity } from './identity';
 import { DiagnosticPanel } from './quality/DiagnosticPanel';
 import { useStableQuality } from './quality/useStableQuality';
@@ -112,6 +112,12 @@ export function PulseRtcVideoProvider({
   /** tela que o usuário fixou explicitamente (📌). `null` = segue o automático. */
   const [pinnedScreenId, setPinnedScreenId] = useState<string | null>(null);
   const prevScreenIdsRef = useRef<string[]>([]);
+  /** volume por identidade de participante remoto (0..2, padrão 1). */
+  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  /** volume por id de tela compartilhada remota (0..2, padrão 1). */
+  const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>({});
+  /** identidades de participantes remotos conectados (independe de ter stream). */
+  const [connectedIds, setConnectedIds] = useState<string[]>([]);
 
   const teardown = useCallback(() => {
     if (qualityPollRef.current) {
@@ -152,16 +158,6 @@ export function PulseRtcVideoProvider({
           return { identity, lane: lane as Lane, stream };
         }),
       );
-    };
-
-    const streamFor = (identity: string, lane: Lane): MediaStream => {
-      const key = keyOf(identity, lane);
-      let s = streamsRef.current.get(key);
-      if (!s) {
-        s = new MediaStream();
-        streamsRef.current.set(key, s);
-      }
-      return s;
     };
 
     const dropParticipant = (identity: string) => {
@@ -211,12 +207,14 @@ export function PulseRtcVideoProvider({
       logger.warn({ event: LogEvent.PULSERTC_CONNECTION_FAILED, roomId: joinConfig.roomId, message: err.message });
     });
 
-    room.on(RoomEvent.ParticipantConnected, () => {
+    room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
+      setConnectedIds((prev) => prev.includes(participant.identity) ? prev : [...prev, participant.identity]);
       refreshNames();
       refreshQuality();
     });
 
     room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+      setConnectedIds((prev) => prev.filter((id) => id !== participant.identity));
       dropParticipant(participant.identity);
       syncRemoteStreams();
       const drop = (prev: Record<string, boolean>) => {
@@ -230,16 +228,21 @@ export function PulseRtcVideoProvider({
 
     room.on(RoomEvent.TrackSubscribed, (track, publication: RemotePublication, participant: RemoteParticipant) => {
       let lane = laneOf(publication);
-      // Fallback: se o servidor não marcou `source: "screen"` mas o participante
-      // já tem um vídeo na faixa de câmera, esta 2ª faixa de vídeo é a tela.
+      // Fallback: se o servidor não marcou `source: "screen"` corretamente mas o
+      // participante já tem um vídeo na faixa cam, ou já existe uma faixa screen
+      // (ex: áudio da tela chegou primeiro), este vídeo é compartilhamento de tela.
       if (lane === 'cam' && track.kind === 'video') {
         const cam = streamsRef.current.get(keyOf(participant.identity, 'cam'));
-        if (cam && cam.getVideoTracks().length > 0) lane = 'screen';
+        const screen = streamsRef.current.get(keyOf(participant.identity, 'screen'));
+        if ((cam && cam.getVideoTracks().length > 0) || screen) lane = 'screen';
       }
       pubLaneRef.current[publication.id] = lane;
-      const stream = streamFor(participant.identity, lane);
-      stream.getTracks().filter((t) => t.kind === track.kind).forEach((t) => stream.removeTrack(t));
-      stream.addTrack(track);
+      // Cria novo MediaStream em vez de mutar o existente — garante que o React
+      // detecte a mudança via comparação de referência e atualize o srcObject.
+      const key = keyOf(participant.identity, lane);
+      const prev = streamsRef.current.get(key);
+      const prevTracks = prev ? prev.getTracks().filter((t) => t.kind !== track.kind) : [];
+      streamsRef.current.set(key, new MediaStream([...prevTracks, track]));
       syncRemoteStreams();
       refreshNames();
       // Indicadores (mic mudo / câmera off) só valem p/ a faixa de câmera — o
@@ -257,8 +260,12 @@ export function PulseRtcVideoProvider({
       const key = keyOf(participant.identity, lane);
       const stream = streamsRef.current.get(key);
       if (stream) {
-        stream.getTracks().filter((t) => t.kind === publication.kind).forEach((t) => stream.removeTrack(t));
-        if (stream.getTracks().length === 0) streamsRef.current.delete(key);
+        const remaining = stream.getTracks().filter((t) => t.kind !== publication.kind);
+        if (remaining.length === 0) {
+          streamsRef.current.delete(key);
+        } else {
+          streamsRef.current.set(key, new MediaStream(remaining));
+        }
       }
       syncRemoteStreams();
     });
@@ -326,10 +333,18 @@ export function PulseRtcVideoProvider({
       }
 
       try {
-        await room.localParticipant.enableCameraAndMicrophone();
+        // Tenta habilitar câmera + microfone juntos (caminho feliz).
+        // Se falhar (ex: sem câmera), cai no fallback que tenta cada um separado.
+        try {
+          await room.localParticipant.enableCameraAndMicrophone();
+          if (!joinConfig.microphoneEnabled) await room.localParticipant.setMicrophoneEnabled(false);
+          if (!joinConfig.cameraEnabled) await room.localParticipant.setCameraEnabled(false);
+        } catch {
+          // Fallback: habilita cada dispositivo separado e ignora o que falhar.
+          try { await room.localParticipant.setCameraEnabled(joinConfig.cameraEnabled); } catch { /* sem câmera */ }
+          try { await room.localParticipant.setMicrophoneEnabled(joinConfig.microphoneEnabled); } catch { /* sem mic */ }
+        }
         if (cancelled) return;
-        if (!joinConfig.microphoneEnabled) await room.localParticipant.setMicrophoneEnabled(false);
-        if (!joinConfig.cameraEnabled) await room.localParticipant.setCameraEnabled(false);
         const camPubs = [...room.localParticipant.publications.values()].filter(
           (p) => p.source !== 'screen',
         );
@@ -452,15 +467,32 @@ export function PulseRtcVideoProvider({
     names[identity.split('.')[0]] ?? names[identity] ?? labelForIdentity(identity, i);
 
   const camStreams = remoteStreams.filter((r) => r.lane === 'cam');
-  const remotes = camStreams.map(({ identity, stream }, i) => ({
-    stream,
-    name: nameFor(identity, i),
-    quality: qualityFor(quality, identity),
-    audioMuted: audioMutedFor(audioMuted, identity),
-    cameraOff: stateFor(videoOff, identity) === true || stream.getVideoTracks().length === 0,
-  }));
+  const camIdentities = new Set(camStreams.map((r) => r.identity));
+  const remotes = [
+    ...camStreams.map(({ identity, stream }, i) => ({
+      identity,
+      stream: stream as MediaStream | null,
+      name: nameFor(identity, i),
+      quality: qualityFor(quality, identity),
+      audioMuted: audioMutedFor(audioMuted, identity),
+      cameraOff: stateFor(videoOff, identity) === true || stream.getVideoTracks().length === 0,
+    })),
+    // Participantes conectados mas sem stream publicado (ex: sem câmera/microfone).
+    ...connectedIds
+      .filter((id) => !camIdentities.has(id))
+      .map((identity, i) => ({
+        identity,
+        stream: null as MediaStream | null,
+        name: nameFor(identity, camStreams.length + i),
+        quality: qualityFor(quality, identity),
+        audioMuted: true as boolean | undefined,
+        cameraOff: true,
+      })),
+  ];
 
   // Todas as telas compartilhadas (própria + remotas). `id` estável p/ o foco.
+  // ID remoto usa `identity::screen` em vez de `stream.id` para não mudar quando
+  // o stream é recriado (ao adicionar track de vídeo após o áudio chegar primeiro).
   const screens: { id: string; label: string; stream: MediaStream }[] = [
     ...(localScreenStream
       ? [{ id: 'local', label: 'Sua tela', stream: localScreenStream }]
@@ -468,7 +500,7 @@ export function PulseRtcVideoProvider({
     ...remoteStreams
       .filter((r) => r.lane === 'screen')
       .map(({ identity, stream }, i) => ({
-        id: stream.id,
+        id: keyOf(identity, 'screen'),
         label: `Tela de ${nameFor(identity, i)}`,
         stream,
       })),
@@ -529,6 +561,12 @@ export function PulseRtcVideoProvider({
                   ? () => setPinnedScreenId((p) => (p ? null : focusedScreen.id))
                   : undefined
               }
+              volume={focusedScreen.id !== 'local' ? (screenVolumes[focusedScreen.id] ?? 1) : undefined}
+              onVolumeChange={
+                focusedScreen.id !== 'local'
+                  ? (v) => setScreenVolumes((prev) => ({ ...prev, [focusedScreen.id]: v }))
+                  : undefined
+              }
             />
           )}
         </div>
@@ -564,9 +602,9 @@ export function PulseRtcVideoProvider({
             selfAudio
             compact={hasStage}
           />
-          {remotes.map(({ stream, name, quality: q, audioMuted: am, cameraOff }) => (
+          {remotes.map(({ identity, stream, name, quality: q, audioMuted: am, cameraOff }) => (
             <Tile
-              key={stream.id}
+              key={stream?.id ?? identity}
               label={name}
               name={name}
               stream={stream}
@@ -574,6 +612,8 @@ export function PulseRtcVideoProvider({
               audioMuted={am}
               cameraOff={cameraOff}
               compact={hasStage}
+              volume={volumes[identity] ?? 1}
+              onVolumeChange={(v) => setVolumes((prev) => ({ ...prev, [identity]: v }))}
             />
           ))}
         </div>
@@ -586,7 +626,7 @@ export function PulseRtcVideoProvider({
       {screens
         .filter((s) => s.id !== 'local' && s.stream.getAudioTracks().length > 0)
         .map((s) => (
-          <ScreenAudio key={s.id} stream={s.stream} />
+          <ScreenAudio key={s.id} stream={s.stream} volume={screenVolumes[s.id] ?? 1} />
         ))}
 
       <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
@@ -623,8 +663,8 @@ export function PulseRtcVideoProvider({
           {remotes.length > 0 && (
             <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span className="text-slate-400">Participantes</span>
-              {remotes.map(({ stream, name, quality: q, audioMuted: am }) => (
-                <span key={stream.id} className="flex items-center gap-1.5">
+              {remotes.map(({ identity, stream, name, quality: q, audioMuted: am }) => (
+                <span key={stream?.id ?? identity} className="flex items-center gap-1.5">
                   <ParticipantMuteIndicator muted={am} name={name} />
                   <span className="text-slate-300">{name}</span>
                   <ConnectionSignal
@@ -678,6 +718,32 @@ export function PulseRtcVideoProvider({
   );
 }
 
+function VolumeSlider({ volume, onChange }: { volume: number; onChange: (v: number) => void }) {
+  return (
+    <div
+      className="flex items-center gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <span className="text-xs text-white/70">🔈</span>
+      <input
+        type="range"
+        min={0}
+        max={2}
+        step={0.05}
+        value={volume}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-1 w-20 cursor-pointer accent-white"
+        aria-label="Volume"
+      />
+      <span className="w-8 text-right text-[11px] text-white/70">
+        {Math.round(volume * 100)}%
+      </span>
+    </div>
+  );
+}
+
 /** Medidor de volume: 4 barrinhas que acendem conforme o nível 0..1. */
 function AudioMeter({ level, className = '' }: { level: number; className?: string }) {
   const bars = 4;
@@ -696,12 +762,17 @@ function AudioMeter({ level, className = '' }: { level: number; className?: stri
 }
 
 /** Áudio da tela compartilhada (aba/sistema). Elemento à parte do `<video>` p/
- *  o som não cortar quando a tela troca de palco↔miniatura. */
-function ScreenAudio({ stream }: { stream: MediaStream }) {
+ *  o som não cortar quando a tela troca de palco↔miniatura. O volume é
+ *  controlado pelo GainNode; o elemento fica muted para evitar dupla saída. */
+function ScreenAudio({ stream, volume = 1 }: { stream: MediaStream; volume?: number }) {
   const ref = useRef<HTMLAudioElement>(null);
   useEffect(() => {
-    if (ref.current) ref.current.srcObject = stream;
+    if (ref.current) {
+      ref.current.srcObject = stream;
+      ref.current.muted = true;
+    }
   }, [stream]);
+  useAudioGain(stream, volume);
   return <audio ref={ref} autoPlay className="hidden" />;
 }
 
@@ -712,6 +783,8 @@ function ScreenTile({
   compact = false,
   onClick,
   pinned = false,
+  volume = 1,
+  onVolumeChange,
 }: {
   label: string;
   stream?: MediaStream;
@@ -720,6 +793,8 @@ function ScreenTile({
   /** miniatura: traz pro palco (fixa). palco: alterna fixar/soltar. */
   onClick?: () => void;
   pinned?: boolean;
+  volume?: number;
+  onVolumeChange?: (v: number) => void;
 }) {
   const ownRef = useRef<HTMLVideoElement>(null);
   const ref = videoRef ?? ownRef;
@@ -764,6 +839,13 @@ function ScreenTile({
           📌 {hint}
         </span>
       )}
+      {!compact && onVolumeChange && (
+        <div className="absolute bottom-10 right-2 z-10">
+          <div className="rounded bg-black/75 px-2 py-1">
+            <VolumeSlider volume={volume} onChange={onVolumeChange} />
+          </div>
+        </div>
+      )}
     </>
   );
   return onClick ? (
@@ -787,6 +869,8 @@ function Tile({
   cameraOff = false,
   selfAudio = false,
   compact = false,
+  volume = 1,
+  onVolumeChange,
 }: {
   label: string;
   name: string;
@@ -799,12 +883,20 @@ function Tile({
   cameraOff?: boolean;
   selfAudio?: boolean;
   compact?: boolean;
+  volume?: number;
+  onVolumeChange?: (v: number) => void;
 }) {
   const ownRef = useRef<HTMLVideoElement>(null);
   const ref = videoRef ?? ownRef;
   useEffect(() => {
     if (ref.current && stream) ref.current.srcObject = stream;
   }, [ref, stream]);
+  // Participantes remotos: silencia o elemento e roteia pelo GainNode para
+  // permitir controle de volume. Tile próprio (muted=true) não precisa.
+  useEffect(() => {
+    if (!muted && ref.current) ref.current.muted = true;
+  }, [muted, ref]);
+  useAudioGain(stream, volume, !muted);
 
   const stableRemote = useStableQuality(quality?.level ?? 'UNKNOWN');
   const level: QualityLevel = levelOverride ?? stableRemote;
@@ -817,7 +909,7 @@ function Tile({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg bg-black ${
+      className={`group relative overflow-hidden rounded-lg bg-black ${
         compact ? 'aspect-video h-full shrink-0' : 'h-full min-h-0 w-full'
       } ${speaking ? 'ring-2 ring-green-400' : ''}`}
     >
@@ -860,6 +952,13 @@ function Tile({
         <span className="absolute left-2 top-2 max-w-[75%] rounded bg-black/70 px-2 py-1 text-[11px] text-amber-200">
           {level === 'POOR' ? 'Conexão ruim' : 'Conexão instável'}
         </span>
+      )}
+      {!compact && !muted && onVolumeChange && (
+        <div className="absolute bottom-10 right-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="rounded bg-black/75 px-2 py-1">
+            <VolumeSlider volume={volume} onChange={onVolumeChange} />
+          </div>
+        </div>
       )}
     </div>
   );

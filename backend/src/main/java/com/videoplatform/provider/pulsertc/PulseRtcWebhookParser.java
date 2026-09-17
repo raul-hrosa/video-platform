@@ -53,9 +53,15 @@ public class PulseRtcWebhookParser implements MediaWebhookParser {
         JsonNode room = root.path("room");
         String roomId = firstNonBlank(text(root, "roomId"), text(room, "id"), text(room, "roomId"));
 
+        // PulseRTC coloca os dados do participante em `data.identity`;
+        // formatos alternativos (participant.identity, root.identity) mantidos p/ compatibilidade.
+        JsonNode data = root.path("data");
         JsonNode participant = root.path("participant");
-        String participantId = firstNonBlank(text(root, "identity"), text(participant, "identity"));
-        String participantName = firstNonBlank(text(participant, "name"), participantId);
+        String participantId = firstNonBlank(
+                text(data, "identity"),
+                text(root, "identity"),
+                text(participant, "identity"));
+        String participantName = firstNonBlank(text(data, "name"), text(participant, "name"), participantId);
         Instant joinedAt = participant.isMissingNode()
                 ? null
                 : parseInstant(text(participant, "joinedAt"), null, occurredAt);

@@ -136,7 +136,11 @@ export function useAppState(serverUrl: string): UseAppState {
   }, []);
 
   const fail = useCallback((err: Error) => {
-    setError({ code: 'CONNECTION_ERROR', message: 'Conexao com a sala foi perdida.' });
+    const isToken = err.name === 'TokenError';
+    const message = isToken
+      ? 'Sessao expirada. Volte e entre na sala novamente.'
+      : 'Nao foi possivel conectar a sala. Verifique sua conexao com a internet e tente de novo.';
+    setError({ code: 'CONNECTION_ERROR', message });
     setSession(null);
     setState('ERROR');
     logger.error({ event: LogEvent.LIVEKIT_CONNECTION_ERROR, message: err.message });
