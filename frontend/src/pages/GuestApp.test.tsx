@@ -20,7 +20,7 @@ vi.mock('../services/api', () => ({
   fetchGuestToken: (...a: unknown[]) => fetchGuestToken(...a),
 }));
 vi.mock('../config', () => ({
-  config: { mediaProvider: 'livekit', livekitUrl: 'wss://lk', pulsertcUrl: '', apiBaseUrl: '/api' },
+  config: { mediaProvider: 'livekit', livekitUrl: 'wss://lk', apiBaseUrl: '/api' },
   configuredServerUrl: () => 'wss://lk',
 }));
 vi.mock('./CallRoom', () => ({

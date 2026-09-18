@@ -48,6 +48,7 @@ const room: RoomResponse = {
   startedAt: '2026-08-28T13:20:00Z',
   endedAt: '2026-08-28T13:39:00Z',
   expiresAt: '2026-08-28T13:40:00Z',
+  connectedCount: 0,
 };
 
 const noop = () => {};

@@ -33,7 +33,6 @@ function VideoApp({ userName }: { userName: string }) {
 
   useRoomDeepLink(selectRoom);
 
-  // Com PulseRTC o `serverUrl` vem no token (§6); so o LiveKit exige URL local.
   if (config.mediaProvider === 'livekit' && !config.livekitUrl) {
     return (
       <div className="mx-auto max-w-md p-6">

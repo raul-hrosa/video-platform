@@ -276,35 +276,6 @@ export function fetchParticipantNames(roomId: string): Promise<Record<string, st
   );
 }
 
-/**
- * Qualidade ao vivo por participante, calculada pela Quality Engine do provider
- * de mídia (Sprint 12 §16). Rota de leitura pública; só existe com PulseRTC —
- * com LiveKit responde 404 e o cliente ignora.
- */
-export type QualityScale = 'EXCELLENT' | 'GOOD' | 'UNSTABLE' | 'POOR' | 'UNKNOWN';
-
-export interface StreamQuality {
-  level: QualityScale;
-  score?: number | null;
-  reason?: string | null;
-  metrics?: Record<string, unknown> | null;
-}
-
-export interface MediaQualityRow {
-  participantRef: string;
-  level: QualityScale;
-  score?: number | null;
-  reason?: string | null;
-  metrics?: Record<string, unknown> | null;
-  audio?: StreamQuality | null;
-  video?: StreamQuality | null;
-  connection?: StreamQuality | null;
-}
-
-export function fetchMediaQuality(roomId: string): Promise<MediaQualityRow[]> {
-  return request<MediaQualityRow[]>(`/v1/rooms/${encodeURIComponent(roomId)}/media-quality`);
-}
-
 /** Token de visitante sem conta (rota publica). Identidade = `guest:{uuid}` do backend. */
 export function fetchGuestToken(roomId: string, name: string): Promise<TokenResponse> {
   return request<TokenResponse>(`/v1/rooms/${encodeURIComponent(roomId)}/guest-token`, {

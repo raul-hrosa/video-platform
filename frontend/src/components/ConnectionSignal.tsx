@@ -1,8 +1,8 @@
 /**
  * Indicador de qualidade de conexão estilo "sinal de celular" (Sprint 13).
  *
- * Só **apresenta** o estado oficial (`QualityLevel` — vem do PulseRTC via
- * `video-platform`). Zero lógica WebRTC aqui (§2). Cor nunca é o único sinal:
+ * Só **apresenta** o estado oficial (`QualityLevel`, calculado pelo provider de
+ * mídia ativo). Zero lógica WebRTC aqui (§2). Cor nunca é o único sinal:
  * barras + texto + `aria-label` sempre presentes (§3, §10).
  */
 import type { QualityLevel } from '../types/connectionQuality';

@@ -52,6 +52,8 @@ export interface RoomResponse {
   startedAt: string | null;
   endedAt: string | null;
   expiresAt: string | null;
+  /** Pessoas com sessao aberta agora nesta sala. So vem preenchido na listagem. */
+  connectedCount: number;
 }
 
 /** GET /rooms/{roomId}/participants (Sprint 9 §10) — identidades agregadas. */

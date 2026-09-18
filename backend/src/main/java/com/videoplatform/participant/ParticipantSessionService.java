@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -103,6 +106,19 @@ public class ParticipantSessionService {
     @Transactional(readOnly = true)
     public List<ParticipantSession> listByRoom(String roomId) {
         return repository.findByRoomIdOrderByJoinedAtAsc(roomId);
+    }
+
+    /** Quantas pessoas estao conectadas agora (sessao aberta) em cada sala, em lote. */
+    @Transactional(readOnly = true)
+    public Map<String, Integer> countConnectedByRoomIds(Collection<String> roomIds) {
+        if (roomIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Integer> counts = new HashMap<>();
+        for (Object[] row : repository.countOpenGroupedByRoomIds(roomIds)) {
+            counts.put((String) row[0], ((Long) row[1]).intValue());
+        }
+        return counts;
     }
 
     @Transactional(readOnly = true)

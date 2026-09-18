@@ -119,8 +119,12 @@ public class RoomController {
                         .filter(java.util.Objects::nonNull).toList());
         Map<UUID, String> owners = userDirectory.namesByIds(
                 page.getContent().stream().map(Room::getOwnerId).toList());
+        Map<String, Integer> connectedCounts = participantSessionService.countConnectedByRoomIds(
+                page.getContent().stream().map(Room::getRoomId).toList());
         return PageResponse.from(page, room -> toResponse(room,
-                profiles.get(room.getRoomProfileId()), owners.get(room.getOwnerId())));
+                room.getRoomProfileId() == null ? null : profiles.get(room.getRoomProfileId()),
+                owners.get(room.getOwnerId()),
+                connectedCounts.getOrDefault(room.getRoomId(), 0)));
     }
 
     /** Panorama do dashboard da Organization (Sprint 7 §22). */
@@ -201,9 +205,14 @@ public class RoomController {
     }
 
     private static RoomResponse toResponse(Room room, RoomProfile profile, String ownerName) {
+        return toResponse(room, profile, ownerName, 0);
+    }
+
+    private static RoomResponse toResponse(Room room, RoomProfile profile, String ownerName,
+                                           int connectedCount) {
         return profile == null
-                ? RoomResponse.from(room, null, null, ownerName)
-                : RoomResponse.from(room, profile.getName(), profile.getType().name(), ownerName);
+                ? RoomResponse.from(room, null, null, ownerName, connectedCount)
+                : RoomResponse.from(room, profile.getName(), profile.getType().name(), ownerName, connectedCount);
     }
 
     // ---- entrar na chamada ----
@@ -240,8 +249,8 @@ public class RoomController {
 
     /**
      * Nomes de exibicao por identidade de participante (Sprint 11). Rota de
-     * leitura pública: o provider de mídia (PulseRTC) não propaga o nome dos
-     * outros participantes, então o cliente na chamada resolve por aqui casando
+     * leitura pública: o provider de mídia não propaga o nome dos outros
+     * participantes, então o cliente na chamada resolve por aqui casando
      * o prefixo {@code <sub>} da identidade {@code <sub>.<8hex>}. Não expõe nada
      * sensível — só {@code {"user:uuid":"Nome"}} de quem pegou token nesta sala.
      */

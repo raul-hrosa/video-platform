@@ -10,10 +10,11 @@ import java.util.Map;
  * Guarda o nome de exibição informado no momento em que o token de mídia é
  * emitido, indexado por {@code (roomId, identity)} (Sprint 11).
  *
- * <p>O PulseRTC não propaga o nome dos outros participantes por nenhum canal
- * (signaling ou REST) — só devolve a identidade {@code <sub>.<8hex>}. O cliente
- * na chamada resolve o nome consultando {@code GET /api/v1/rooms/{id}/participant-names}
- * e casando o prefixo {@code <sub>} da identidade.
+ * <p>Alguns providers de mídia não propagam o nome dos outros participantes por
+ * nenhum canal (signaling ou REST) — só devolvem a identidade
+ * {@code <sub>.<8hex>}. O cliente na chamada resolve o nome consultando
+ * {@code GET /api/v1/rooms/{id}/participant-names} e casando o prefixo
+ * {@code <sub>} da identidade.
  *
  * <p>Armazenamento em memória, best-effort: um mapa por sala, com teto de salas
  * (LRU por inserção). Some num restart — aceitável para um dado puramente

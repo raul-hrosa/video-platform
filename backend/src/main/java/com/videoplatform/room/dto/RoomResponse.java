@@ -27,15 +27,21 @@ public record RoomResponse(
         Instant createdAt,
         Instant startedAt,
         Instant endedAt,
-        Instant expiresAt
+        Instant expiresAt,
+        int connectedCount
 ) {
 
     public static RoomResponse from(Room room) {
-        return from(room, null, null, null);
+        return from(room, null, null, null, 0);
     }
 
     public static RoomResponse from(Room room, String roomProfileName, String roomProfileType,
                                     String ownerName) {
+        return from(room, roomProfileName, roomProfileType, ownerName, 0);
+    }
+
+    public static RoomResponse from(Room room, String roomProfileName, String roomProfileType,
+                                    String ownerName, int connectedCount) {
         return new RoomResponse(
                 room.getId(),
                 room.getRoomId(),
@@ -52,6 +58,7 @@ public record RoomResponse(
                 room.getCreatedAt(),
                 room.getStartedAt(),
                 room.getEndedAt(),
-                room.getExpiresAt());
+                room.getExpiresAt(),
+                connectedCount);
     }
 }

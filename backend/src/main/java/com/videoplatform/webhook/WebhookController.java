@@ -31,20 +31,6 @@ public class WebhookController {
         return respond(webhookService.process(body, authorization));
     }
 
-    /**
-     * Recebe eventos do PulseRTC (Sprint 11 §12). O corpo precisa ser lido cru
-     * porque o HMAC-SHA256 confere os bytes exatos; a assinatura chega no header
-     * {@code X-PulseRTC-Signature} e e repassada ao parser via {@code authHeader}.
-     * Apenas um {@code MediaWebhookParser} fica ativo por vez (§17), entao ambos
-     * os endpoints delegam ao mesmo {@code WebhookService}.
-     */
-    @PostMapping(value = "/pulsertc", consumes = MediaType.ALL_VALUE)
-    public Map<String, Object> pulsertc(
-            @RequestBody String body,
-            @RequestHeader(value = "X-PulseRTC-Signature", required = false) String signature) {
-        return respond(webhookService.process(body, signature));
-    }
-
     private static Map<String, Object> respond(WebhookService.WebhookResult result) {
         return Map.of(
                 "processed", result.processed(),

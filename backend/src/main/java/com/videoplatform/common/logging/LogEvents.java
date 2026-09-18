@@ -88,19 +88,6 @@ public final class LogEvents {
     public static final String WEBHOOK_DUPLICATED = "WEBHOOK_DUPLICATED";
     public static final String WEBHOOK_PROCESSING_FAILED = "WEBHOOK_PROCESSING_FAILED";
 
-    // PulseRTC media provider (Sprint 11 §16)
-    public static final String PULSERTC_ROOM_CREATED = "PULSERTC_ROOM_CREATED";
-    public static final String PULSERTC_ROOM_CLOSED = "PULSERTC_ROOM_CLOSED";
-    public static final String PULSERTC_TOKEN_CREATED = "PULSERTC_TOKEN_CREATED";
-    public static final String PULSERTC_PARTICIPANT_JOINED = "PULSERTC_PARTICIPANT_JOINED";
-    public static final String PULSERTC_PARTICIPANT_LEFT = "PULSERTC_PARTICIPANT_LEFT";
-    public static final String PULSERTC_SESSION_RECONNECTED = "PULSERTC_SESSION_RECONNECTED";
-    public static final String PULSERTC_SESSION_RECOVERED = "PULSERTC_SESSION_RECOVERED";
-    public static final String PULSERTC_CONNECTION_FAILED = "PULSERTC_CONNECTION_FAILED";
-    public static final String PULSERTC_QUALITY_UPDATED = "PULSERTC_QUALITY_UPDATED";
-    public static final String PULSERTC_API_ERROR = "PULSERTC_API_ERROR";
-    public static final String PULSERTC_WEBHOOK_REPLAY_REJECTED = "PULSERTC_WEBHOOK_REPLAY_REJECTED";
-
     // HTTP
     public static final String HTTP_REQUEST = "HTTP_REQUEST";
     public static final String HTTP_RESPONSE = "HTTP_RESPONSE";

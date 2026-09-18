@@ -4,7 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Selecao central do provider de midia (Sprint 11 §17). {@code livekit} e o
- * padrao / fallback durante a validacao; {@code pulsertc} ativa o adapter novo.
+ * unico provider hoje; a chave existe para permitir plugar outro adapter no
+ * futuro sem mexer nos consumidores (ver {@code MediaTokenProvider} e cia).
  */
 @ConfigurationProperties(prefix = "media")
 public record MediaProperties(String provider) {
@@ -14,10 +15,6 @@ public record MediaProperties(String provider) {
             provider = "livekit";
         }
         provider = provider.trim().toLowerCase();
-    }
-
-    public boolean isPulseRtc() {
-        return "pulsertc".equals(provider);
     }
 
     public boolean isLiveKit() {

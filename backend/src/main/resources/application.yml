@@ -20,17 +20,9 @@ spring:
     locations: classpath:db/migration
 
 media:
-  # Provider de midia ativo (Sprint 11 §17): livekit (padrao/fallback) ou pulsertc.
+  # Provider de midia ativo (Sprint 11 §17): livekit e o unico hoje; a chave
+  # existe para permitir plugar outro adapter no futuro.
   provider: ${MEDIA_PROVIDER:livekit}
-  pulsertc:
-    api-url: ${PULSERTC_API_URL:}
-    api-key: ${PULSERTC_API_KEY:}
-    # URL publica do signaling plane entregue ao browser; se vazia, derivada de api-url.
-    ws-url: ${PULSERTC_WS_URL:}
-    # Segredo HMAC-SHA256 dos webhooks; se vazio, usa a api-key.
-    webhook-secret: ${PULSERTC_WEBHOOK_SECRET:}
-    token-ttl: PT1H
-    webhook-tolerance: PT5M
 
 livekit:
   url: ${LIVEKIT_URL:}

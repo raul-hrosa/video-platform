@@ -6,14 +6,12 @@ indicadores de mic/câmera e sinal de conexão, histórico e analytics por sala,
 e agendamentos recorrentes com link permanente.
 
 A camada de mídia (WebRTC) é abstraída atrás de um contrato próprio, então o
-provedor por trás pode trocar sem tocar no resto do sistema:
-
-- **PulseRTC** — servidor de sinalização + SFU próprio, self-hosted.
-- **LiveKit Cloud** — alternativa gerenciada, usada como fallback.
-
-A escolha é uma variável de ambiente (`MEDIA_PROVIDER`); o restante da
-aplicação (backend e frontend) fala só com a interface da plataforma, nunca
-diretamente com o SDK do provedor.
+provedor por trás pode trocar sem tocar no resto do sistema. Hoje o único
+provedor é o **LiveKit Cloud** (gerenciado); a escolha é uma variável de
+ambiente (`MEDIA_PROVIDER`), e o restante da aplicação (backend e frontend)
+fala só com a interface da plataforma, nunca diretamente com o SDK do
+provedor — plugar outro provider no futuro é implementar esse contrato, sem
+mudar os consumidores.
 
 ## Arquitetura
 
@@ -22,7 +20,7 @@ React (Vite + TS + Tailwind)
    |
    |  HTTP / REST   (nginx faz proxy de /api -> backend)
    v
-Spring Boot API  ---- emite o token de mídia (LiveKit ou PulseRTC)
+Spring Boot API  ---- emite o token de mídia (LiveKit)
    |          \
    v           \--- recebe webhooks do provedor (ciclo de vida da sala)
 PostgreSQL          ^
@@ -39,13 +37,14 @@ PostgreSQL          ^
   multi-tenant. As credenciais do provedor de mídia nunca saem do backend.
 - **PostgreSQL**: salas, participantes, sessões, eventos de webhook,
   agendamentos (migrations Flyway).
-- **PulseRTC / LiveKit**: infraestrutura de mídia/WebRTC e origem dos
-  webhooks de ciclo de vida.
+- **LiveKit**: infraestrutura de mídia/WebRTC e origem dos webhooks de ciclo
+  de vida.
 
 Monólito modular no backend, pacotes por feature: `organization`,
 `roomprofile`, `room`, `appointment`, `participant`, `webhook`, `analytics`,
-`quality`, `provider` (contratos de mídia + implementações PulseRTC/LiveKit),
-`auth`, `common`. Sem microsserviços.
+`quality`, `provider` (contratos de mídia + implementação LiveKit — o
+desenho existe para permitir outro adapter no futuro), `auth`, `common`. Sem
+microsserviços.
 
 O limite de isolamento dos dados é a **Organization** (ver seção
 "Organizations"), não o usuário individual.
@@ -53,9 +52,7 @@ O limite de isolamento dos dados é a **Organization** (ver seção
 ## Pré-requisitos
 
 - Docker + Docker Compose
-- Um provedor de mídia configurado: uma conta no
-  [LiveKit Cloud](https://cloud.livekit.io) **ou** um servidor
-  [PulseRTC](https://github.com/raulhrosa/pulsertc) acessível
+- Uma conta no [LiveKit Cloud](https://cloud.livekit.io)
 
 ## Configuração
 
@@ -65,9 +62,8 @@ O limite de isolamento dos dados é a **Organization** (ver seção
    cp .env.example .env
    ```
 
-2. Escolha o provedor de mídia em `MEDIA_PROVIDER` (`livekit` ou `pulsertc`,
-   precisa bater com `VITE_MEDIA_PROVIDER`) e preencha o bloco
-   correspondente:
+2. Preencha as credenciais do LiveKit Cloud (`MEDIA_PROVIDER=livekit` já é o
+   padrão e precisa bater com `VITE_MEDIA_PROVIDER`):
 
    ```env
    # LiveKit Cloud (Settings -> Keys no painel)
@@ -75,12 +71,6 @@ O limite de isolamento dos dados é a **Organization** (ver seção
    LIVEKIT_API_KEY=APIxxxxxxxxxxxx
    LIVEKIT_API_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
    VITE_LIVEKIT_URL=wss://SEU-PROJETO.livekit.cloud
-
-   # ou PulseRTC (control plane HTTP + signaling WS)
-   PULSERTC_API_URL=http://host.docker.internal:8090
-   PULSERTC_API_KEY=...
-   PULSERTC_WS_URL=ws://localhost:8090/ws
-   VITE_PULSERTC_URL=ws://localhost:8090/ws
    ```
 
 3. Gere um segredo para assinar o token de sessão da plataforma (mínimo 32
@@ -131,7 +121,6 @@ Base: `/api/v1`. Salvo os públicos abaixo, **toda rota exige**
 | `GET`  | `/public/appointments/{publicAccessId}` | Link permanente do agendamento. Payload mínimo: `{ title, participantName, state, scheduledStart, scheduledEnd, joinWindowOpensAt, roomId, nextOccurrenceStart }`. `state` = `BEFORE_WINDOW`\|`WAITING_ROOM`\|`JOINABLE`\|`ENDED`\|`CANCELLED`. |
 | `POST` | `/public/appointments/{publicAccessId}/token` | Entra na ocorrência atual. Body `{ name }` opcional. `409` fora da janela de entrada. |
 | `POST` | `/webhooks/livekit` | Webhook do LiveKit — autenticação própria (assinatura), não JWT de usuário. |
-| `POST` | `/webhooks/pulsertc` | Webhook do PulseRTC — assinatura HMAC própria. |
 | `GET`  | `/actuator/health` | Healthcheck. |
 
 ### Room Profiles — configuração reutilizável (opcional)
@@ -164,7 +153,6 @@ obrigatório: ver "Salas" abaixo para a criação direta.
 | `GET`  | `/rooms/{roomId}/sessions` | Sessões de participação. |
 | `GET`  | `/rooms/{roomId}/analytics` | Métricas da sala + bloco `quality`. |
 | `GET`  | `/rooms/{roomId}/quality` | Qualidade por participante (última leitura de cada um). |
-| `GET`  | `/rooms/{roomId}/media-quality` | Qualidade em tempo real reportada pelo provedor (quando é PulseRTC). |
 | `POST` | `/rooms/{roomId}/token` | Token de mídia para o usuário autenticado. Identidade estável derivada do usuário. `404`/`409 ROOM_EXPIRED`. |
 | `GET`  | `/rooms/{roomId}/sessions/mine` | A própria sessão aberta do usuário na sala. |
 
@@ -198,9 +186,9 @@ Erros seguem `{ "code": "...", "message": "..." }`, nunca stack trace.
 
 - **Dois tokens distintos, nunca misturados**: o token de sessão da
   plataforma (assinado com `JWT_SECRET`) autentica o usuário na API; o token
-  de mídia (LiveKit ou PulseRTC) só serve para conectar na chamada e é gerado
-  no backend a partir da identidade autenticada. O token da plataforma nunca
-  é enviado ao provedor de mídia.
+  de mídia (LiveKit) só serve para conectar na chamada e é gerado no backend
+  a partir da identidade autenticada. O token da plataforma nunca é enviado
+  ao provedor de mídia.
 - Senha: BCrypt. Nunca aparece em resposta nem em log. Login usa mensagem
   genérica — não revela se o e-mail existe.
 - O acesso de gestão (histórico, participantes, analytics, qualidade, CRUD de
@@ -310,11 +298,10 @@ devolve `null`/vazio e a interface diz "sem dados".
 
 ## Webhooks
 
-O backend valida a autenticidade de cada webhook antes de processar — o
-LiveKit com o `WebhookReceiver` do SDK oficial (JWT + checksum do corpo), o
-PulseRTC com a própria assinatura HMAC-SHA256. Reenvios são ignorados por
-`event_id` (idempotência). Eventos tratados: início/fim de sala, entrada/saída
-de participante.
+O backend valida a autenticidade de cada webhook antes de processar, com o
+`WebhookReceiver` do SDK oficial do LiveKit (JWT + checksum do corpo).
+Reenvios são ignorados por `event_id` (idempotência). Eventos tratados:
+início/fim de sala, entrada/saída de participante.
 
 Sem o webhook configurado a chamada de vídeo funciona normalmente, mas as
 transições de estado da sala e as sessões de participantes não são
@@ -329,8 +316,7 @@ túnel:
 ngrok http 8081
 ```
 
-E configure a URL do webhook no painel do provedor (`.../api/v1/webhooks/livekit`
-ou `.../api/v1/webhooks/pulsertc`).
+E configure a URL do webhook no painel do LiveKit (`.../api/v1/webhooks/livekit`).
 
 ## Logs e observabilidade
 
@@ -363,12 +349,8 @@ Indicador de qualidade por participante, em linguagem simples (sinal tipo
 celular) em vez de números crus — o detalhe técnico fica num painel de
 diagnóstico opcional.
 
-- Com **PulseRTC**: o frontend coleta estatísticas WebRTC e envia ao
-  provedor; a engine de qualidade dele calcula o veredito e empurra eventos
-  em tempo real pelo canal de sinalização, complementados por uma leitura
-  periódica via API para quem entrou antes.
-- Com **LiveKit**: o nível vem do evento de qualidade de conexão do próprio
-  SDK, calculado no servidor.
+- O nível vem do evento de qualidade de conexão do próprio SDK do LiveKit,
+  calculado no servidor.
 - Métrica indisponível no navegador aparece como ausente, nunca como zero.
 - O indicador aplica uma pequena histerese na apresentação para não piscar
   entre dois níveis em segundos — sem alterar a classificação oficial.
@@ -424,7 +406,7 @@ Frontend:
 
 ```bash
 cd frontend
-cp .env.example .env          # ajuste o provedor de mídia e VITE_API_URL
+cp .env.example .env          # preencha VITE_LIVEKIT_URL e VITE_API_URL
 npm install
 npm run dev                   # http://localhost:5173
 npm test                      # Vitest
@@ -440,9 +422,6 @@ O dev server (`vite`) já faz proxy de `/api` para `localhost:8081`, então com
 - **Front via `npm run dev`**: `ngrok http 5173`. O CORS já vem liberado
   para qualquer origem por padrão (a API não usa cookies); para restringir,
   defina `APP_CORS_ALLOWED_ORIGINS` com uma lista de origens.
-- Para acesso via túnel do provedor de mídia (PulseRTC self-hosted), veja a
-  observação sobre UDP/TURN no `.env.example` — o túnel HTTP não carrega a
-  mídia sozinho, só o sinalização.
 
 ## Testes
 
@@ -455,9 +434,8 @@ Organizations/multi-tenant. Alguns testes de migração/isolamento usam
 Testcontainers e são pulados sem Docker disponível.
 
 Frontend: `cd frontend && npm test` (Vitest). Cobre autenticação,
-Organizations, room profiles, fluxo de convidado, histórico, o provedor de
-mídia PulseRTC (sinalização, qualidade, compartilhamento de tela, medidor de
-volume) e a fronteira com o SDK do LiveKit.
+Organizations, room profiles, fluxo de convidado, histórico e a fronteira
+com o SDK do LiveKit.
 
 ## Arquitetura futura
 
@@ -467,7 +445,8 @@ Organization -> Users -> Rooms -> Participants -> Sessions -> Analytics
 ```
 
 - Troca de provedor de mídia sem mudança de código, apenas configuração —
-  já suportado entre LiveKit e PulseRTC; abre espaço para outros.
+  o contrato já existe (ver `provider/`); hoje só o LiveKit implementa,
+  mas abre espaço para outros.
 
 ## Fora de escopo (por enquanto)
 

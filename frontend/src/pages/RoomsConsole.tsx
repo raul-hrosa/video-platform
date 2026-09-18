@@ -119,6 +119,11 @@ export function RoomsConsole({
                 {room.name && <p className="truncate text-xs text-slate-400">{room.name}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-3 text-xs text-slate-400">
+                {room.connectedCount > 0 && (
+                  <span title="Pessoas conectadas agora">
+                    👤 {room.connectedCount}
+                  </span>
+                )}
                 {room.displayStatus === 'LIVE' && room.startedAt && (
                   <span>{formatDuration(elapsedSince(room.startedAt))}</span>
                 )}

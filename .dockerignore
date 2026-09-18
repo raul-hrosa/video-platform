@@ -1,7 +1,4 @@
 # Contexto de build da imagem do frontend (docker-compose: frontend.build.context = .).
-# Sem isto, `COPY frontend/ .` sobrescreve o node_modules recém-instalado no
-# container com o do host (que tem symlinks Windows p/ a dependência vendorizada
-# `@pulsertc/client` que não resolvem no Linux) -> TS2307.
 
 **/node_modules
 **/dist
@@ -9,10 +6,6 @@
 **/.env
 **/.env.*
 !**/.env.example
-
-# a dependência local vendorizada TEM que entrar no build
-!frontend/vendor
-!frontend/vendor/**
 
 .git
 backend
